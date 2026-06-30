@@ -1,0 +1,4 @@
+{
+  "installCommand": "npm ci --no-audit --no-fund --legacy-peer-deps",
+  "buildCommand": "npm run build"
+}
