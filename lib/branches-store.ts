@@ -6,6 +6,7 @@ import type { Branch } from "@/data/branches";
 
 const branchesFile = path.join(process.cwd(), "data", "branches.json");
 const BLOB_PATHNAME = "branches.json";
+const BLOB_ACCESS = "public" as const;
 
 function useBlobStorage(): boolean {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
@@ -13,7 +14,7 @@ function useBlobStorage(): boolean {
 
 async function readBranchesFromBlob(): Promise<Branch[] | null> {
   try {
-    const result = await get(BLOB_PATHNAME, { access: "private" });
+    const result = await get(BLOB_PATHNAME, { access: BLOB_ACCESS });
     if (result?.statusCode !== 200 || !result.stream) return null;
 
     const raw = await new Response(result.stream).text();
@@ -22,7 +23,7 @@ async function readBranchesFromBlob(): Promise<Branch[] | null> {
     try {
       const { blobs } = await list({ prefix: BLOB_PATHNAME, limit: 1 });
       if (!blobs.length) return null;
-      const fallback = await get(blobs[0].pathname, { access: "private" });
+      const fallback = await get(blobs[0].pathname, { access: BLOB_ACCESS });
       if (fallback?.statusCode !== 200 || !fallback.stream) return null;
       const raw = await new Response(fallback.stream).text();
       return JSON.parse(raw) as Branch[];
@@ -57,7 +58,7 @@ export async function saveBranches(branches: Branch[]): Promise<Branch[]> {
 
   if (useBlobStorage()) {
     await put(BLOB_PATHNAME, payload, {
-      access: "private",
+      access: BLOB_ACCESS,
       addRandomSuffix: false,
       allowOverwrite: true,
     });
