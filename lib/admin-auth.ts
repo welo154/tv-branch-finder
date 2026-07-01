@@ -10,17 +10,31 @@ export function isValidAdminPassword(password: string | null | undefined): boole
 }
 
 export function getAdminPasswordFromRequest(request: Request): string | null {
-  const headerPassword = request.headers.get("x-admin-password");
-  if (headerPassword) return headerPassword;
-
   const authorization = request.headers.get("authorization");
   if (authorization?.startsWith("Bearer ")) {
-    return authorization.slice(7);
+    const token = authorization.slice(7).trim();
+    if (token) return token;
   }
+
+  const headerPassword = request.headers.get("x-admin-password")?.trim();
+  if (headerPassword) return headerPassword;
 
   return null;
 }
 
-export function isAuthorizedAdminRequest(request: Request): boolean {
+export function isAuthorizedAdminRequest(
+  request: Request,
+  bodyPassword?: string | null
+): boolean {
+  const fromBody = bodyPassword?.trim();
+  if (fromBody && isValidAdminPassword(fromBody)) return true;
   return isValidAdminPassword(getAdminPasswordFromRequest(request));
+}
+
+export function adminAuthHeaders(password: string): Record<string, string> {
+  const trimmed = password.trim();
+  return {
+    Authorization: `Bearer ${trimmed}`,
+    "x-admin-password": trimmed,
+  };
 }

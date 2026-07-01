@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Branch } from "@/data/branches";
 import { buildMapsUrl, parseCoordsFromMapsUrl } from "@/lib/maps-utils";
+import { adminAuthHeaders } from "@/lib/admin-auth";
 
 const AUTH_KEY = "tv-admin-password";
 
@@ -54,14 +55,27 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const selectedBranch = useMemo(
-    () => branches.find((branch) => branch.id === selectedId) ?? null,
-    [branches, selectedId]
-  );
-
   useEffect(() => {
-    const saved = sessionStorage.getItem(AUTH_KEY);
-    if (saved) setStoredPassword(saved);
+    const saved = sessionStorage.getItem(AUTH_KEY)?.trim();
+    if (!saved) return;
+
+    fetch("/api/admin/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: saved }),
+    })
+      .then((response) => response.json())
+      .then((data: { valid: boolean }) => {
+        if (data.valid) {
+          setStoredPassword(saved);
+          return;
+        }
+        sessionStorage.removeItem(AUTH_KEY);
+        setError("Session expired. Sign in again.");
+      })
+      .catch(() => {
+        sessionStorage.removeItem(AUTH_KEY);
+      });
   }, []);
 
   useEffect(() => {
@@ -74,30 +88,26 @@ export default function AdminPage() {
   }, [storedPassword]);
 
   useEffect(() => {
-    if (!selectedBranch) {
-      setForm(emptyForm());
-      setPhonesText("");
-      setKeywordsText("");
-      return;
-    }
+    if (selectedId === null) return;
 
-    setForm(branchToForm(selectedBranch));
-    setPhonesText(formatList(selectedBranch.phone));
-    setKeywordsText(formatList(selectedBranch.keywords));
-  }, [selectedBranch]);
+    const branch = branches.find((item) => item.id === selectedId);
+    if (!branch) return;
+
+    setForm(branchToForm(branch));
+    setPhonesText(formatList(branch.phone));
+    setKeywordsText(formatList(branch.keywords));
+  }, [selectedId]);
 
   async function loadBranches(adminPassword: string) {
     setLoading(true);
     setError("");
 
     try {
-      const response = await fetch("/api/branches");
+      const response = await fetch("/api/branches", { cache: "no-store" });
       if (!response.ok) throw new Error("Could not load branches.");
       const data = (await response.json()) as Branch[];
       setBranches(data);
-      if (data.length && selectedId === null) {
-        setSelectedId(data[0].id);
-      }
+      setSelectedId((current) => (current !== null && data.some((branch) => branch.id === current) ? current : data[0]?.id ?? null));
       void adminPassword;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load branches.");
@@ -185,9 +195,9 @@ export default function AdminPage() {
         method,
         headers: {
           "Content-Type": "application/json",
-          "x-admin-password": storedPassword,
+          ...adminAuthHeaders(storedPassword),
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, adminPassword: storedPassword.trim() }),
       });
 
       if (!response.ok) {
@@ -202,6 +212,9 @@ export default function AdminPage() {
         return next.sort((a, b) => a.id - b.id);
       });
       setSelectedId(saved.id);
+      setForm(branchToForm(saved));
+      setPhonesText(formatList(saved.phone));
+      setKeywordsText(formatList(saved.keywords));
       setStatus(isNew ? "Branch created." : "Branch saved.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Save failed.");
@@ -221,7 +234,7 @@ export default function AdminPage() {
     try {
       const response = await fetch(`/api/branches/${form.id}`, {
         method: "DELETE",
-        headers: { "x-admin-password": storedPassword },
+        headers: adminAuthHeaders(storedPassword),
       });
 
       if (!response.ok) {

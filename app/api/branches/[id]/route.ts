@@ -1,8 +1,10 @@
-import { revalidateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import type { Branch } from "@/data/branches";
 import { isAuthorizedAdminRequest } from "@/lib/admin-auth";
 import { deleteBranch, getBranchById, upsertBranch } from "@/lib/branches-store";
+
+export const dynamic = "force-dynamic";
 
 type RouteContext = { params: { id: string } };
 
@@ -24,17 +26,24 @@ export async function GET(_request: Request, { params }: RouteContext) {
 }
 
 export async function PUT(request: Request, { params }: RouteContext) {
-  if (!isAuthorizedAdminRequest(request)) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
   const id = Number(params.id);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid branch id." }, { status: 400 });
   }
 
+  let body: Partial<Branch> & { adminPassword?: string };
   try {
-    const body = (await request.json()) as Partial<Branch>;
+    body = (await request.json()) as Partial<Branch> & { adminPassword?: string };
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  if (!isAuthorizedAdminRequest(request, body.adminPassword)) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  try {
+    const { adminPassword: _adminPassword, ...branchBody } = body;
     const existing = await getBranchById(id);
 
     if (!existing) {
@@ -43,29 +52,31 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
     const branch: Branch = {
       ...existing,
-      ...body,
+      ...branchBody,
       id,
-      nameEn: body.nameEn?.trim() ?? existing.nameEn,
-      nameAr: body.nameAr?.trim() ?? existing.nameAr,
-      addressEn: body.addressEn?.trim() ?? existing.addressEn,
-      addressAr: body.addressAr?.trim() ?? existing.addressAr,
-      cityEn: body.cityEn?.trim() ?? existing.cityEn,
-      cityAr: body.cityAr?.trim() ?? existing.cityAr,
-      areaEn: body.areaEn?.trim() ?? existing.areaEn,
-      areaAr: body.areaAr?.trim() ?? existing.areaAr,
-      phone: Array.isArray(body.phone) ? body.phone : existing.phone,
-      email: body.email?.trim() ?? existing.email,
-      latitude: body.latitude === undefined ? existing.latitude : body.latitude,
-      longitude: body.longitude === undefined ? existing.longitude : body.longitude,
-      mapsUrl: body.mapsUrl?.trim() ?? existing.mapsUrl,
-      keywords: Array.isArray(body.keywords) ? body.keywords : existing.keywords,
+      nameEn: branchBody.nameEn?.trim() ?? existing.nameEn,
+      nameAr: branchBody.nameAr?.trim() ?? existing.nameAr,
+      addressEn: branchBody.addressEn?.trim() ?? existing.addressEn,
+      addressAr: branchBody.addressAr?.trim() ?? existing.addressAr,
+      cityEn: branchBody.cityEn?.trim() ?? existing.cityEn,
+      cityAr: branchBody.cityAr?.trim() ?? existing.cityAr,
+      areaEn: branchBody.areaEn?.trim() ?? existing.areaEn,
+      areaAr: branchBody.areaAr?.trim() ?? existing.areaAr,
+      phone: Array.isArray(branchBody.phone) ? branchBody.phone : existing.phone,
+      email: branchBody.email?.trim() ?? existing.email,
+      latitude: branchBody.latitude === undefined ? existing.latitude : branchBody.latitude,
+      longitude: branchBody.longitude === undefined ? existing.longitude : branchBody.longitude,
+      mapsUrl: branchBody.mapsUrl?.trim() ?? existing.mapsUrl,
+      keywords: Array.isArray(branchBody.keywords) ? branchBody.keywords : existing.keywords,
     };
 
     await upsertBranch(branch);
     revalidateTag("branches");
+    revalidatePath("/");
     return NextResponse.json(branch);
-  } catch {
-    return NextResponse.json({ error: "Failed to update branch." }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update branch.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -87,8 +98,10 @@ export async function DELETE(request: Request, { params }: RouteContext) {
 
     const branches = await deleteBranch(id);
     revalidateTag("branches");
+    revalidatePath("/");
     return NextResponse.json(branches);
-  } catch {
-    return NextResponse.json({ error: "Failed to delete branch." }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete branch.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -1,15 +1,17 @@
-import { revalidateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import type { Branch } from "@/data/branches";
 import { isAuthorizedAdminRequest } from "@/lib/admin-auth";
-import { getCachedBranches, getBranches, getNextBranchId, saveBranches } from "@/lib/branches-store";
+import { getBranches, getNextBranchId, saveBranches } from "@/lib/branches-store";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const branches = await getCachedBranches();
+    const branches = await getBranches();
     return NextResponse.json(branches, {
       headers: {
-        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        "Cache-Control": "no-store",
       },
     });
   } catch {
@@ -18,12 +20,18 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!isAuthorizedAdminRequest(request)) {
+  let body: Partial<Branch> & { adminPassword?: string };
+  try {
+    body = (await request.json()) as Partial<Branch> & { adminPassword?: string };
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  if (!isAuthorizedAdminRequest(request, body.adminPassword)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   try {
-    const body = (await request.json()) as Partial<Branch>;
     const branches = await getBranches();
     const branch: Branch = {
       id: body.id ?? getNextBranchId(branches),
@@ -46,8 +54,10 @@ export async function POST(request: Request) {
     branches.push(branch);
     await saveBranches(branches);
     revalidateTag("branches");
+    revalidatePath("/");
     return NextResponse.json(branch, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Failed to create branch." }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to create branch.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
