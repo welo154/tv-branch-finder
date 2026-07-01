@@ -1,9 +1,9 @@
 import BranchFinder from "@/components/BranchFinder";
-import { getCachedBranches } from "@/lib/branches-store";
+import { getBranches } from "@/lib/branches-store";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const branches = await getCachedBranches();
+  const branches = await getBranches();
   return <BranchFinder initialBranches={branches} />;
 }

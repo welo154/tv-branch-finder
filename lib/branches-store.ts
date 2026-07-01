@@ -1,7 +1,7 @@
-import { unstable_cache } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { promises as fs } from "fs";
 import path from "path";
-import { list, put } from "@vercel/blob";
+import { get, list, put } from "@vercel/blob";
 import type { Branch } from "@/data/branches";
 
 const branchesFile = path.join(process.cwd(), "data", "branches.json");
@@ -13,15 +13,22 @@ function useBlobStorage(): boolean {
 
 async function readBranchesFromBlob(): Promise<Branch[] | null> {
   try {
-    const { blobs } = await list({ prefix: BLOB_PATHNAME, limit: 1 });
-    const blob = blobs.find((item) => item.pathname === BLOB_PATHNAME) ?? blobs[0];
-    if (!blob?.url) return null;
+    const result = await get(BLOB_PATHNAME, { access: "private" });
+    if (result?.statusCode !== 200 || !result.stream) return null;
 
-    const response = await fetch(blob.url, { cache: "no-store" });
-    if (!response.ok) return null;
-    return (await response.json()) as Branch[];
+    const raw = await new Response(result.stream).text();
+    return JSON.parse(raw) as Branch[];
   } catch {
-    return null;
+    try {
+      const { blobs } = await list({ prefix: BLOB_PATHNAME, limit: 1 });
+      if (!blobs.length) return null;
+      const fallback = await get(blobs[0].pathname, { access: "private" });
+      if (fallback?.statusCode !== 200 || !fallback.stream) return null;
+      const raw = await new Response(fallback.stream).text();
+      return JSON.parse(raw) as Branch[];
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -50,7 +57,7 @@ export async function saveBranches(branches: Branch[]): Promise<Branch[]> {
 
   if (useBlobStorage()) {
     await put(BLOB_PATHNAME, payload, {
-      access: "public",
+      access: "private",
       addRandomSuffix: false,
       allowOverwrite: true,
     });
@@ -95,4 +102,9 @@ export async function deleteBranch(id: number): Promise<Branch[]> {
 
 export function getNextBranchId(branches: Branch[]): number {
   return branches.reduce((max, branch) => Math.max(max, branch.id), 0) + 1;
+}
+
+export function invalidateBranchesCache(): void {
+  revalidateTag("branches");
+  revalidatePath("/");
 }

@@ -46,6 +46,21 @@ export default function BranchFinder({ initialBranches }: BranchFinderProps) {
     branchListRef.current = branchList;
   }, [branchList]);
 
+  useEffect(() => {
+    fetch("/api/branches", { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Could not refresh branches.");
+        return response.json() as Promise<Branch[]>;
+      })
+      .then((branches) => {
+        setBranchList(branches);
+        setSortedBranches(branches);
+      })
+      .catch(() => {
+        // Keep server-rendered initialBranches if refresh fails.
+      });
+  }, []);
+
   const nearestBranches = useMemo(() => {
     if (!location) return [];
     return sortedBranches.slice(0, 2);

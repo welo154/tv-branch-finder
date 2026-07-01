@@ -1,8 +1,7 @@
-import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import type { Branch } from "@/data/branches";
 import { isAuthorizedAdminRequest } from "@/lib/admin-auth";
-import { deleteBranch, getBranchById, upsertBranch } from "@/lib/branches-store";
+import { deleteBranch, getBranchById, invalidateBranchesCache, upsertBranch } from "@/lib/branches-store";
 
 export const dynamic = "force-dynamic";
 
@@ -71,8 +70,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
     };
 
     await upsertBranch(branch);
-    revalidateTag("branches");
-    revalidatePath("/");
+    invalidateBranchesCache();
     return NextResponse.json(branch);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to update branch.";
@@ -97,8 +95,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
     }
 
     const branches = await deleteBranch(id);
-    revalidateTag("branches");
-    revalidatePath("/");
+    invalidateBranchesCache();
     return NextResponse.json(branches);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to delete branch.";

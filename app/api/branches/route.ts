@@ -1,8 +1,7 @@
-import { revalidatePath, revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import type { Branch } from "@/data/branches";
 import { isAuthorizedAdminRequest } from "@/lib/admin-auth";
-import { getBranches, getNextBranchId, saveBranches } from "@/lib/branches-store";
+import { getBranches, getNextBranchId, invalidateBranchesCache, saveBranches } from "@/lib/branches-store";
 
 export const dynamic = "force-dynamic";
 
@@ -53,8 +52,7 @@ export async function POST(request: Request) {
 
     branches.push(branch);
     await saveBranches(branches);
-    revalidateTag("branches");
-    revalidatePath("/");
+    invalidateBranchesCache();
     return NextResponse.json(branch, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create branch.";
