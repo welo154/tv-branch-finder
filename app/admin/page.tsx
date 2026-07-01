@@ -115,17 +115,18 @@ export default function AdminPage() {
       const response = await fetch("/api/admin/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password: password.trim() }),
       });
       const data = (await response.json()) as { valid: boolean };
 
       if (!data.valid) {
-        setError("Wrong password.");
+        setError("Wrong password. On the live site, use the ADMIN_PASSWORD set in Vercel (or tv-admin if none is set).");
         return;
       }
 
-      sessionStorage.setItem(AUTH_KEY, password);
-      setStoredPassword(password);
+      const trimmed = password.trim();
+      sessionStorage.setItem(AUTH_KEY, trimmed);
+      setStoredPassword(trimmed);
       setStatus("Signed in.");
     } catch {
       setError("Could not verify password.");

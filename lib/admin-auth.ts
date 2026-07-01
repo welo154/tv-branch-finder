@@ -1,10 +1,12 @@
 export function getAdminPassword(): string {
-  return process.env.ADMIN_PASSWORD ?? "tv-admin";
+  const configured = process.env.ADMIN_PASSWORD?.trim();
+  return configured || "tv-admin";
 }
 
 export function isValidAdminPassword(password: string | null | undefined): boolean {
-  if (!password) return false;
-  return password === getAdminPassword();
+  const normalized = password?.trim();
+  if (!normalized) return false;
+  return normalized === getAdminPassword();
 }
 
 export function getAdminPasswordFromRequest(request: Request): string | null {
